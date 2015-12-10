@@ -10,8 +10,4 @@ var Country = new mongoose.Schema({
     names: [CountryNames]
 });
 
-Country.virtual('id').get(function() { return this._id; });
-
-Country.set('toJSON', { virtuals: true });
-
 module.exports = mongoose.model('Country', Country);

@@ -12,8 +12,4 @@ var Language = new mongoose.Schema({
     names: [LanguageNames]
 });
 
-Language.virtual('id').get(function() { return this._id; });
-
-Language.set('toJSON', { virtuals: true });
-
 module.exports = mongoose.model('Language', Language);

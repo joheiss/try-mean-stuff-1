@@ -2,129 +2,97 @@ var express = require('express');
 var router = express.Router();
 var buffer = require('../buffers/buffer');
 var Country = require('../models/countryModel');
+var Currency = require('../models/currencyModel');
 var Language = require('../models/languageModel');
 var Geo = require('../models/geoModel');
 var _ = require('lodash');
 
-// send countries
-var sendCountries = function (countries, language, res) {
+// send results
+var sendResults = function (res, model, records, language) {
 
-    // countries = filterByLanguage(countries, language);
-    countries = findCountriesByLanguage(countries, language);
-    res.status(200).send(countries);
+    var results = findByLanguage(model, records, language);
+    res.status(200).send(results);
 };
 
-// send languages
-var sendLanguages = function (languages, language, res) {
-
-    languages = findLanguageByLanguage(languages, language);
-    res.status(200).send(languages);
+// find / filter by iso code
+var findByIsoCode = function (records, code) {
+    return [_.find(records, {'isoCode': code})];
 };
 
-// find by country code
-var findCountryByCountryCode = function (countries, code) {
-    return [_.find(countries, {'isoCode': code})];
-};
+// find / filter by language
+var findByLanguage = function (model, records, language) {
 
-// find by countries by language
-var findCountriesByLanguage = function (countries, language) {
+    var foundRecords = [],
+        foundRecord,
+        fields;
 
     if (language !== undefined) {
-        var foundCountries = [];
-        countries.forEach(function (country) {
-            var foundCountry = {};
-            foundCountry.isoCode = country.isoCode;
-            foundCountry.names = [_.find(country.names, {'language': language})];
-            foundCountries.push(foundCountry);
+        fields = model.schema.paths;
+        records.forEach(function (record) {
+            foundRecord = {};
+            for (var field in fields) {
+                if (field === "names") {
+                    foundRecord[field] = [_.find(record[field], {'language': language})];
+                } else {
+                    foundRecord[field] = record[field];
+                }
+            }
+            foundRecords.push(foundRecord);
         });
-        return foundCountries;
+        return foundRecords;
     } else {
-        return countries;
+        return records;
     }
 };
 
-// find by language code
-var findLanguageByLanguageCode = function (languages, code) {
-    return [_.find(languages, {'isoCode': code})];
-};
+// get and send data
+var getAndSendData = function (res, model, language, bufferedRecords, code) {
 
-// find language by language
-var findLanguageByLanguage = function (languages, language) {
+    var records,
+        query;
 
-    if (language !== undefined) {
-        var foundLanguages = [];
-        languages.forEach(function (lang) {
-            var foundLanguage = {};
-            foundLanguage.isoCode = lang.isoCode;
-            foundLanguage.iso6392b = lang.iso6392b;
-            foundLanguage.iso6392t = lang.iso6392t;
-            foundLanguage.names = [_.find(lang.names, {'language': language})];
-            foundLanguages.push(foundLanguage);
-        });
-        return foundLanguages;
+
+    if (bufferedRecords) {
+        // retrieve data from buffer - if exists
+        records = bufferedRecords;
+        if (code) {
+            records = findByIsoCode(records, code);
+        }
+        sendResults(res, model, records, language);
     } else {
-        return languages;
-    }
-};
-// GET countries
-router.get('/countries', function (req, res, next) {
-
-    if (buffer.countries) {
-        sendCountries(buffer.countries, req.query.lang, res);
-    } else {
-        Country.find()
+        // retrieve data from database
+        query = {};
+        if (code) {
+            query = { isoCode: code };
+        }
+        model.find(query)
             .exec()
-            .then(function (countries) {
-                buffer.countries = countries;
-                sendCountries(countries, req.query.lang, res);
+            .then(function (records) {
+                bufferedRecords = records;
+                sendResults(res, model, records, language);
             }, function (err) {
                 res.status(400).send(err);
             });
     }
-});
+};
 
-// GET country by ISO code
-router.get('/countries/:code', function (req, res, next) {
+// get and send geo data
+var getAndSendGeos = function(res, code) {
 
-    if (buffer.countries) {
-        var countries = findCountryByCountryCode(buffer.countries, req.params.code);
-        sendCountries(countries, req.query.lang, res);
-    } else {
-        Country.find({isoCode: req.params.code})
-            .exec()
-            .then(function (countries) {
-                buffer.countries = countries;
-                sendCountries(countries, req.query.lang, res);
-            }, function (err) {
-                res.status(400).send(err);
-            });
-    }
-});
+    var query = {};
 
-// GET geos
-router.get('/geos', function (req, res, next) {
-
-    Geo.find()
-        .exec()
-        .then(function (geos) {
-            res.status(200).send(geos);
-        }, function (err) {
-            res.status(400).send(err);
-        });
-});
-
-// GET geos by ISO code
-router.get('/geos/:code', function (req, res, next) {
-
-    var query;
-    if (req.params.code.length === 2) {
-        query = { cca2: req.params.code };
-    } else if (req.params.code.length === 3) {
-        query = { cca3: req.params.code };
-    } else {
-        query = { "names.common": req.params.code };
+    // prepare query - there must be a better as identifying the parameters by their length ... searching
+    if (code) {
+        if (code.length === 2) {
+            query = {cca2: code};
+        } else if (code.length === 3) {
+            query = {cca3: code};
+        } else if (code.length > 3){
+            query = {"names.common": code};
+        }
     }
 
+    // retrieve data from database
     Geo.find(query)
         .exec()
         .then(function (geos) {
@@ -132,41 +100,54 @@ router.get('/geos/:code', function (req, res, next) {
         }, function (err) {
             res.status(400).send(err);
         });
+};
+
+// GET countries
+router.get('/countries', function (req, res, next) {
+
+    getAndSendData(res, Country, req.query.lang, buffer.countries);
+});
+
+// GET country by ISO code
+router.get('/countries/:code', function (req, res, next) {
+
+    getAndSendData(res, Country, req.query.lang, buffer.countries, req.params.code);
+});
+
+// GET geos
+router.get('/geos', function (req, res, next) {
+
+    getAndSendGeos(res);
+});
+
+// GET geos by ISO code
+router.get('/geos/:code', function (req, res, next) {
+
+    getAndSendGeos(res, req.params.code);
+});
+
+// GET currencies
+router.get('/currencies', function (req, res, next) {
+
+    getAndSendData(res, Currency, req.query.lang, buffer.currencies);
+});
+
+// GET currencies by ISO code
+router.get('/currencies/:code', function (req, res, next) {
+
+    getAndSendData(res, Currency, req.query.lang, buffer.currencies, req.params.code);
 });
 
 // GET languages
 router.get('/languages', function (req, res, next) {
 
-    if (buffer.languages) {
-        sendLanguages(buffer.languages, req.query.lang, res);
-    } else {
-        Language.find()
-            .exec()
-            .then(function (languages) {
-                buffer.languages = languages;
-                sendLanguages(languages, req.query.lang, res);
-            }, function (err) {
-                res.status(400).send(err);
-            });
-    }
+    getAndSendData(res, Language, req.query.lang, buffer.languages);
 });
 
 // GET language by ISO code
 router.get('/languages/:code', function (req, res, next) {
 
-    if (buffer.languages) {
-        var languages = findLanguageByLanguageCode(buffer.language, req.params.code);
-        sendLanguages(languages, req.query.lang, res);
-    } else {
-        Language.find({isoCode: req.params.code})
-            .exec()
-            .then(function (languages) {
-                buffer.languages = languages;
-                sendLanguages(languages, req.query.lang, res);
-            }, function (err) {
-                res.status(400).send(err);
-            });
-    }
+    getAndSendData(res, Language, req.query.lang, buffer.languages, req.params.code);
 });
 
 module.exports = router;

@@ -24,13 +24,14 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
-// enable CORS
+
+// enable CORS ... still have to understand CORS better
 app.use(cors());
 
 // connect to mongoose
 mongoose.connect(process.env.MONGO_URL);
 
-// initialize data
+// initialize buffer ... not yet sure if buffering does any good here
 var buffer = require('./buffers/buffer');
 buffer.initialize();
 

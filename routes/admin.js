@@ -6,6 +6,7 @@ var csvparse = require('csv-parse');
 var fs = require('fs');
 var Country = require('../models/countryModel');
 var Language = require('../models/languageModel');
+var Currency = require('../models/currencyModel');
 var Geo = require('../models/geoModel');
 var _ = require('lodash');
 var buffer = require('../buffers/buffer');
@@ -16,7 +17,10 @@ router.post('/import/countries', upload.any(), parseFile);
 // import language file
 router.post('/import/languages', upload.any(), parseFile);
 
-// import language file
+// import currency file
+router.post('/import/currencies', upload.any(), parseFile);
+
+// import geo data
 router.get('/import/geo', function (req, res, next) {
 
     var url = 'mongodb://localhost:27017/jovisco-test';
@@ -64,6 +68,8 @@ function parseFile(req, res, next) {
         collName = "countries";
     } else if (req.path.indexOf("/languages") !== -1) {
         collName = "languages";
+    } else if (req.path.indexOf("/currencies") !== -1) {
+        collName = "currencies";
     } else {
         onError({err: "Unknown collection"});
     }
@@ -84,6 +90,10 @@ function parseCSVFile(sourceFilePath, columns, collName, onNewRecord, onError, o
         delimiter: ';',
         columns: columns
     });
+
+    var decimals,
+        hexas,
+        symbol;
 
     parser.on("readable", function () {
         var record;
@@ -120,6 +130,37 @@ function parseCSVFile(sourceFilePath, columns, collName, onNewRecord, onError, o
                 });
                 language.save(function (err) {
                     console.log(err);
+                });
+            } else if (collName === "currencies") {
+                console.log(record);
+                // prepare unicode stuff
+                decimals = [];
+                decimals = record.symbolUnicodeDecimals.split(",");
+                hexas = [];
+                hexas = record.symbolUnicodeHex.split(",");
+                symbol = record.symbol;
+                if (decimals.length > 0 && (!symbol || symbol.indexOf("?") !== -1 || symbol === " ")) {
+                    symbol = String.fromCharCode.apply(symbol, decimals);
+                }
+                // save new currency
+                var currency = new Currency({
+                    isoCode: record.isoCode,
+                    isoNumber: record.isoNumber,
+                    minorUnit: record.minorUnit,
+                    symbol: symbol,
+                    symbolUnicodeDecimals: _.cloneDeep(decimals),
+                    symbolUnicodeHex: _.cloneDeep(hexas),
+                    names: [
+                        {language: "de", name: record.name_de, shortName: record.shortname_de},
+                        {language: "en", name: record.name_en, shortName: record.shortname_en},
+                        {language: "fr", name: record.name_fr, shortName: record.shortname_fr},
+                        {language: "es", name: record.name_es, shortName: record.shortname_es}
+                    ]
+                });
+                currency.save(function (err) {
+                    if (err) {
+                        console.log(err);
+                    }
                 });
             }
             linesRead++;
@@ -168,7 +209,7 @@ function LanguageName(language, name) {
 }
 
 // convert old geo data to new geo data
-var convertOld2NewGeo = function(docs) {
+var convertOld2NewGeo = function (docs) {
 
     var translations, languages, natives;
 
@@ -204,7 +245,7 @@ var convertOld2NewGeo = function(docs) {
 };
 
 // create new geo document and save it to (new) collection
-var createNewGeoDoc = function(doc, translations, languages, natives) {
+var createNewGeoDoc = function (doc, translations, languages, natives) {
 
     // create new geo document
     var geo = new Geo({
