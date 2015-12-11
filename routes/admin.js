@@ -91,77 +91,15 @@ function parseCSVFile(sourceFilePath, columns, collName, onNewRecord, onError, o
         columns: columns
     });
 
-    var decimals,
-        hexas,
-        symbol;
-
     parser.on("readable", function () {
         var record;
         while (record = parser.read()) {
             if (collName === "countries") {
-                // save new country
-                var country = new Country({
-                    isoCode: record.isoCode,
-                    names: [
-                        {language: "de", name: record.name_de},
-                        {language: "en", name: record.name_en},
-                        {language: "fr", name: record.name_fr},
-                        {language: "es", name: record.name_es}
-                    ]
-                });
-                country.save(function (err) {
-                    console.log(err);
-                });
+                createCountry(record);
             } else if (collName === "languages") {
-                // save new language
-                var language = new Language({
-                    isoCode: record.isoCode,
-                    iso6392b: record.iso6392b,
-                    iso6392t: record.iso6392t,
-                    names: [
-                        {language: "de", name: record.name_de},
-                        {language: "en", name: record.name_en},
-                        {language: "fr", name: record.name_fr},
-                        {language: "es", name: record.name_es},
-                        {language: "it", name: record.name_it},
-                        {language: "pt", name: record.name_pt},
-                        {language: "native", name: record.name_native}
-                    ]
-                });
-                language.save(function (err) {
-                    console.log(err);
-                });
+                createLanguage(record);
             } else if (collName === "currencies") {
-                console.log(record);
-                // prepare unicode stuff
-                decimals = [];
-                decimals = record.symbolUnicodeDecimals.split(",");
-                hexas = [];
-                hexas = record.symbolUnicodeHex.split(",");
-                symbol = record.symbol;
-                if (decimals.length > 0 && (!symbol || symbol.indexOf("?") !== -1 || symbol === " ")) {
-                    symbol = String.fromCharCode.apply(symbol, decimals);
-                }
-                // save new currency
-                var currency = new Currency({
-                    isoCode: record.isoCode,
-                    isoNumber: record.isoNumber,
-                    minorUnit: record.minorUnit,
-                    symbol: symbol,
-                    symbolUnicodeDecimals: _.cloneDeep(decimals),
-                    symbolUnicodeHex: _.cloneDeep(hexas),
-                    names: [
-                        {language: "de", name: record.name_de, shortName: record.shortname_de},
-                        {language: "en", name: record.name_en, shortName: record.shortname_en},
-                        {language: "fr", name: record.name_fr, shortName: record.shortname_fr},
-                        {language: "es", name: record.name_es, shortName: record.shortname_es}
-                    ]
-                });
-                currency.save(function (err) {
-                    if (err) {
-                        console.log(err);
-                    }
-                });
+                createCurrency(record);
             }
             linesRead++;
             onNewRecord(record);
@@ -178,6 +116,91 @@ function parseCSVFile(sourceFilePath, columns, collName, onNewRecord, onError, o
 
     source.pipe(parser);
 
+}
+
+// create country
+function createCountry(record) {
+
+    // create country
+    var country = new Country({
+        isoCode: record.isoCode,
+        names: [
+            {language: "de", name: record.name_de},
+            {language: "en", name: record.name_en},
+            {language: "fr", name: record.name_fr},
+            {language: "es", name: record.name_es}
+        ]
+    });
+    // save country
+    country.save(function (err) {
+        if (err) {
+            console.log(err);
+        }
+    });
+}
+
+// create currency
+function createCurrency(record) {
+
+    var decimals,
+        hexas,
+        symbol;
+
+    // prepare unicode stuff
+    decimals = record.symbolUnicodeDecimals.split(",");
+    hexas = record.symbolUnicodeHex.split(",");
+    symbol = record.symbol;
+    if (decimals.length > 0 && (!symbol || symbol.indexOf("?") !== -1 || symbol === " ")) {
+        symbol = String.fromCharCode.apply(symbol, decimals);
+    }
+
+    // create currency
+    var currency = new Currency({
+        isoCode: record.isoCode,
+        isoNumber: record.isoNumber,
+        minorUnit: record.minorUnit,
+        symbol: symbol,
+        symbolUnicodeDecimals: _.cloneDeep(decimals),
+        symbolUnicodeHex: _.cloneDeep(hexas),
+        names: [
+            {language: "de", name: record.name_de, shortName: record.shortname_de},
+            {language: "en", name: record.name_en, shortName: record.shortname_en},
+            {language: "fr", name: record.name_fr, shortName: record.shortname_fr},
+            {language: "es", name: record.name_es, shortName: record.shortname_es}
+        ]
+    });
+
+    // save currency
+    currency.save(function (err) {
+        if (err) {
+            console.log(err);
+        }
+    });
+}
+
+// create language
+function createLanguage(record) {
+
+    // create language
+    var language = new Language({
+        isoCode: record.isoCode,
+        iso6392b: record.iso6392b,
+        iso6392t: record.iso6392t,
+        names: [
+            {language: "de", name: record.name_de},
+            {language: "en", name: record.name_en},
+            {language: "fr", name: record.name_fr},
+            {language: "es", name: record.name_es},
+            {language: "it", name: record.name_it},
+            {language: "pt", name: record.name_pt},
+            {language: "native", name: record.name_native}
+        ]
+    });
+    language.save(function (err) {
+        if (err) {
+            console.log(err);
+        }
+    });
 }
 
 // country name constructor
@@ -213,35 +236,29 @@ var convertOld2NewGeo = function (docs) {
 
     var translations, languages, natives;
 
-    docs.forEach(function (doc) {
+    _.forEach(docs, function (doc) {
         // get translations
         translations = [];
-        for (var prop in doc.translations) {
-            if (doc.translations.hasOwnProperty(prop)) {
-                translations.push(new CountryName(prop,
-                    doc.translations[prop].official,
-                    doc.translations[prop].common));
-            }
-        }
+        _.forOwn(doc.translations, function (value, key) {
+            translations.push(new CountryName(key,
+                doc.translations[key].official,
+                doc.translations[key].common));
+        });
         // get languages
         languages = [];
-        for (var prop in doc.languages) {
-            if (doc.languages.hasOwnProperty(prop)) {
-                languages.push(new LanguageName(prop, doc.languages[prop]));
-            }
-        }
+        _.forOwn(doc.languages, function (value, key) {
+            languages.push(new LanguageName(key, doc.languages[key]));
+        });
         // get natives
         natives = [];
-        for (var prop in doc.name.native) {
-            if (doc.name.native.hasOwnProperty(prop)) {
-                natives.push(new CountryName(prop,
-                    doc.name.native[prop].official,
-                    doc.name.native[prop].common));
-            }
-        }
-        // create new geo document and save it to new collection
-        createNewGeoDoc(doc, translations, languages, natives);
+        _.forOwn(doc.name.native, function (value, key) {
+            natives.push(new CountryNamekey,
+                doc.name.native[key].official,
+                doc.name.native[key].common);
+        });
     });
+    // create new geo document and save it to new collection
+    createNewGeoDoc(doc, translations, languages, natives);
 };
 
 // create new geo document and save it to (new) collection

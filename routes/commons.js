@@ -28,15 +28,15 @@ var findByLanguage = function (model, records, language) {
 
     if (language !== undefined) {
         fields = model.schema.paths;
-        records.forEach(function (record) {
+        _.forEach(records, function(record) {
             foundRecord = {};
-            for (var field in fields) {
-                if (field === "names") {
-                    foundRecord[field] = [_.find(record[field], {'language': language})];
+            _.forOwn(fields, function(value, key) {
+                if (key === "names") {
+                    foundRecord[key] = [_.find(record[key], {'language': language})];
                 } else {
-                    foundRecord[field] = record[field];
+                    foundRecord[key] = record[key];
                 }
-            }
+            });
             foundRecords.push(foundRecord);
         });
         return foundRecords;
