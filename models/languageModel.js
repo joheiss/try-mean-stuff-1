@@ -2,7 +2,7 @@ var mongoose = require('mongoose');
 
 var LanguageNames = new mongoose.Schema({
     language: { type: String, required: true },
-    name:     { type: String, required: true }
+    name:     { type: String, required: false }
 });
 
 var Language = new mongoose.Schema({
